@@ -1,4 +1,4 @@
-package com.zhongjh.libpedometerstoday.db;
+package com.zhongjh.libpedometerstoday.store.db;
 
 import org.greenrobot.greendao.annotation.Entity;
 import org.greenrobot.greendao.annotation.Id;

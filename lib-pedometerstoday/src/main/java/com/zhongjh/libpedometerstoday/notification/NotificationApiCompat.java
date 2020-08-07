@@ -11,6 +11,8 @@ import android.graphics.Bitmap;
 import android.os.Build;
 import android.text.TextUtils;
 
+import androidx.core.app.NotificationCompat;
+
 public class NotificationApiCompat {
 
     private static final String TAG = "NotificationApiCompat";
@@ -18,7 +20,7 @@ public class NotificationApiCompat {
     private final NotificationManager manager;
     private Notification mNotification;
     private final Notification.Builder mBuilder26;
-    private final android.support.v4.app.NotificationCompat.Builder mBuilder25;
+    private final NotificationCompat.Builder mBuilder25;
 
     public NotificationApiCompat(Builder builder) {
         manager = builder.manager;
@@ -32,6 +34,8 @@ public class NotificationApiCompat {
     }
 
     public void startForeground(Service service, int id) {
+        // 从这里我们知道在Context.startForegroundService() 之后必须要调用Service.startForeground
+        // 也就是说在foreground 的启动接口调用后的 5 秒内必须要在service 中调用startForeground() 接口来解除timeout。
         service.startForeground(id, mNotification);
 
     }
@@ -74,7 +78,7 @@ public class NotificationApiCompat {
         private final NotificationManager manager;
         private NotificationChannel mNotificationChannel;
         private Notification.Builder mBuilder26;
-        private android.support.v4.app.NotificationCompat.Builder mBuilder25;
+        private NotificationCompat.Builder mBuilder25;
 
         public Builder(Context context, NotificationManager manager, String channelId, String channelName, int smallIcon) {
             mContext = context;
@@ -210,8 +214,8 @@ public class NotificationApiCompat {
         /**
          * 大于等于Android 8.0 api>=26
          *
-         * @param title
-         * @param content
+         * @param context
+         * @param channelId
          * @return
          */
         @TargetApi(Build.VERSION_CODES.O)
@@ -222,11 +226,10 @@ public class NotificationApiCompat {
         /**
          * 小于Android 8.0 api<26
          *
-         * @param title
-         * @param content
+         * @param context
          * @return
          */
-        private android.support.v4.app.NotificationCompat.Builder getNotification_25(Context context) {
+        private NotificationCompat.Builder getNotification_25(Context context) {
             return new NotificationCompat.Builder(context);
         }
 

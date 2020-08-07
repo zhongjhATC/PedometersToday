@@ -25,7 +25,7 @@ android {
     // 数据库
     greendao {
         schemaVersion 1
-        daoPackage 'com.zhongjh.libpedometerstoday.db.dao'
+        daoPackage 'com.zhongjh.libpedometerstoday.store.db.dao'
         targetGenDir 'src/main/java'
     }
 

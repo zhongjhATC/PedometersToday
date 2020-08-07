@@ -1,4 +1,4 @@
-package com.zhongjh.libpedometerstoday.db.dao;
+package com.zhongjh.libpedometerstoday.store.db.dao;
 
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
