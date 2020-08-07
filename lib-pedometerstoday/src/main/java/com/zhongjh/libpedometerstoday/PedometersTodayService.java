@@ -1,6 +1,5 @@
 package com.zhongjh.libpedometerstoday;
 
-import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -12,7 +11,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.hardware.Sensor;
 import android.hardware.SensorManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -20,15 +21,15 @@ import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 
 import com.zhongjh.libpedometerstoday.notification.BaseClickBroadcast;
 import com.zhongjh.libpedometerstoday.notification.NotificationApiCompat;
-import com.zhongjh.libpedometerstoday.sensor.PedometersTodaySensorEventListener;
+import com.zhongjh.libpedometerstoday.sensor.PedometersTodaySensor;
 import com.zhongjh.libpedometerstoday.util.SportStepUtils;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Map;
+import static com.zhongjh.libpedometerstoday.util.SportStepUtils.getCalorieByStep;
+import static com.zhongjh.libpedometerstoday.util.SportStepUtils.getDistanceByStep;
 
 public class PedometersTodayService extends Service implements Handler.Callback {
 
@@ -39,7 +40,7 @@ public class PedometersTodayService extends Service implements Handler.Callback 
     private static final int BROADCAST_REQUEST_CODE = 100; // 点击通知栏广播requestCode
     private static int CURRENT_STEP = 0; // 当前步数
 
-    private PedometersTodaySensorEventListener mPedometersTodaySensorEventListener; // 加速度传感器计算当天步数，需要保持后台Service
+    private PedometersTodaySensor mPedometersTodaySensor; // 加速度传感器计算当天步数，需要保持后台Service
 
     private boolean mIsBoot = false; // 是否开机启动
 
@@ -76,6 +77,13 @@ public class PedometersTodayService extends Service implements Handler.Callback 
                 }
             }
         }
+
+        mDbSaveCount = 0;
+
+        updateNotification(CURRENT_STEP);
+        // 注册传感器
+        startStepDetector();
+
         return START_STICKY;
     }
 
@@ -83,6 +91,15 @@ public class PedometersTodayService extends Service implements Handler.Callback 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void startStepDetector() {
+        // android4.4以后如果有stepcounter可以使用计步传感器
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && getStepCounter()) {
+            addStepCounterListener();
+        } else {
+            addBasePedoListener();
+        }
     }
 
     /**
@@ -118,8 +135,8 @@ public class PedometersTodayService extends Service implements Handler.Callback 
         }
 
         // 通知内容
-        String km = SportStepUtils.getDistanceByStep(currentStep);
-        String calorie = SportStepUtils.getCalorieByStep(currentStep);
+        String km = getDistanceByStep(currentStep);
+        String calorie = getCalorieByStep(currentStep);
         String contentText = calorie + " 千卡  " + km + " 公里";
 
         mNotificationApiCompat = new NotificationApiCompat.Builder(this,
@@ -137,6 +154,27 @@ public class PedometersTodayService extends Service implements Handler.Callback 
                 .setOnlyAlertOnce(true) // 以便您的通知仅在通知第一次出现时才会中断用户（有声音，振动或视觉线索），而不是以后的更新。
                 .builder();
         mNotificationApiCompat.startForeground(this, NOTIFY_ID);
+    }
+
+    /**
+     * 更新通知
+     */
+    private synchronized void updateNotification(int stepCount) {
+        if (null != mNotificationApiCompat) {
+            String km = getDistanceByStep(stepCount);
+            String calorie = getCalorieByStep(stepCount);
+            String contentText = calorie + " 千卡  " + km + " 公里";
+            mNotificationApiCompat.updateNotification(NOTIFY_ID, getString(R.string.title_notification_bar, String.valueOf(stepCount)), contentText);
+        }
+    }
+
+    /**
+     * @return 是否有stepcounter支持
+     */
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
+    private boolean getStepCounter() {
+        Sensor countSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        return null != countSensor;
     }
 
     /**
@@ -185,8 +223,8 @@ public class PedometersTodayService extends Service implements Handler.Callback 
      * @param steps
      */
     private void setSteps(int steps) {
-        if (null != mPedometersTodaySensorEventListener) {
-            mPedometersTodaySensorEventListener.setCurrentStep(steps);
+        if (null != mPedometersTodaySensor) {
+            mPedometersTodaySensor.setCurrentStep(steps);
         }
     }
 

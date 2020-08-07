@@ -12,13 +12,20 @@ import com.zhongjh.libpedometerstoday.util.DateUtils;
  * Sensor.TYPE_ACCELEROMETER
  * 加速度传感器计算当天步数，需要保持后台Service
  */
-public class PedometersTodaySensorEventListener implements SensorEventListener {
+public class PedometersTodaySensor implements SensorEventListener {
 
     private Context mContext;
+    // 当前时间
     private String mTodayDate;
 
     private int count = 0;
+    // 当前步数
     private int mCount = 0;
+    private OnPedometersTodayListener mOnPedometersTodayListener;
+    // 最后高峰时间
+    private long timeOfLastPeak = 0;
+    // 当前高峰时间
+    private long timeOfThisPeak = 0;
 
     @Override
     public void onSensorChanged(SensorEvent event) {
@@ -33,8 +40,8 @@ public class PedometersTodaySensorEventListener implements SensorEventListener {
     private void setSteps(int initValue) {
         this.mCount = initValue;
         this.count = 0;
-        timeOfLastPeak1 = 0;
-        timeOfThisPeak1 = 0;
+        timeOfLastPeak = 0;
+        timeOfThisPeak = 0;
     }
 
     private String getTodayDate() {
@@ -54,8 +61,8 @@ public class PedometersTodaySensorEventListener implements SensorEventListener {
         mTodayDate = getTodayDate();
         PreferencesHelper.setStepToday(mContext, mTodayDate);
 
-        if(null != mOnStepCounterListener){
-            mOnStepCounterListener.onChangeStepCounter(mCount);
+        if(null != mOnPedometersTodayListener){
+            mOnPedometersTodayListener.onChangeStepCounter(mCount);
         }
     }
 
