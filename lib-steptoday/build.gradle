@@ -1,17 +1,18 @@
-apply plugin: 'com.android.application'
+apply plugin: 'com.android.library'
+apply plugin: 'org.greenrobot.greendao'
 
 android {
     compileSdkVersion 29
     buildToolsVersion "30.0.1"
 
     defaultConfig {
-        applicationId "com.zhongjh.steptoday"
         minSdkVersion 15
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles 'consumer-rules.pro'
     }
 
     buildTypes {
@@ -21,22 +22,29 @@ android {
         }
     }
 
-
+    // 数据库
+    greendao {
+        schemaVersion 1
+        daoPackage 'com.zhongjh.libsteptoday.store.db.dao'
+        targetGenDir 'src/main/java'
+    }
 
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 
-    implementation 'androidx.appcompat:appcompat:1.1.0'
-    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
-    implementation project(path: ':lib-steptoday')
+    compileOnly 'androidx.appcompat:appcompat:1.1.0'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
 
-    implementation 'org.greenrobot:greendao:3.2.2'
+    // 数据库
+    compileOnly 'org.greenrobot:greendao:3.2.2'
 
-
-
+    // 日志 https://github.com/pengwei1024/LogUtils
+    debugCompileOnly 'com.apkfuns.logutils:library:1.7.5'
+    releaseCompileOnly 'com.apkfuns.logutils:logutils-no-op:1.7.5'
+    // 日志写入到文件
+    compileOnly 'com.apkfuns.log2file:log2file:1.3.1'
 }

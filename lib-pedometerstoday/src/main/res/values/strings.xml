@@ -1,5 +1,0 @@
-<resources>
-    <string name="app_name">lib-pedometerstoday</string>
-    <string name="title_notification_bar">当前步数:%1$s</string>
-    <string name="step_channel_name">计步器通知</string>
-</resources>
