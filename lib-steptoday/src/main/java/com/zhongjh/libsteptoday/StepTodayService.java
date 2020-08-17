@@ -175,7 +175,7 @@ public class StepTodayService extends Service implements Handler.Callback {
     }
 
     /**
-     * 使用Android自帶的传感器
+     * 使用Android自帶的计步传感器
      */
     @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     private void addStepCounterListener() {
@@ -206,9 +206,14 @@ public class StepTodayService extends Service implements Handler.Callback {
         JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_TYPE_STEP_COUNTER_REGISTER, map);
     }
 
-
+    /**
+     * 低版本，没有计步传感器，就用加速传感器
+     */
     private void addBasePedoListener() {
-
+        if (null != mStepTodaySensor) {
+            WakeLockUtils.getLock(this); // 锁定CPU
+            CURRENT_STEP = mStepTodaySensor.getCurrentStep(); // 获取当前步数
+        }
     }
 
     /**
