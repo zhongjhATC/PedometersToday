@@ -8,11 +8,11 @@ import org.greenrobot.greendao.annotation.Generated;
 public class StepToday {
     @Id
     private Long id;
-    //当天时间，只显示到天 yyyy-MM-dd
+    // 当天时间，只显示到天 yyyy-MM-dd
     private String today;
-    //步数时间，显示到毫秒
+    // 步数时间，显示到毫秒
     private long date;
-    //对应date时间的步数
+    // 对应date时间的步数
     private long step;
     @Generated(hash = 1396544854)
     public StepToday(Long id, String today, long date, long step) {

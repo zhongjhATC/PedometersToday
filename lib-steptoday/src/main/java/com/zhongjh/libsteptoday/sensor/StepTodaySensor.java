@@ -7,6 +7,7 @@ import android.hardware.SensorEventListener;
 
 import com.zhongjh.libsteptoday.store.preferences.PreferencesHelper;
 import com.zhongjh.libsteptoday.util.DateUtils;
+import com.zhongjh.libsteptoday.util.WakeLockUtils;
 
 /**
  * Sensor.TYPE_ACCELEROMETER
@@ -15,17 +16,15 @@ import com.zhongjh.libsteptoday.util.DateUtils;
 public class StepTodaySensor implements SensorEventListener {
 
     private Context mContext;
-    // 当前时间
-    private String mTodayDate;
 
+    private String mTodayDate; // 当前时间
     private int count = 0;
-    // 当前步数
-    private int mCount = 0;
+    private int mCount = 0; // 当前步数
     private OnStepTodayListener mOnStepTodayListener;
-    // 最后高峰时间
-    private long timeOfLastPeak = 0;
-    // 当前高峰时间
-    private long timeOfThisPeak = 0;
+    private long timeOfLastPeak = 0; // 最后高峰时间
+    private long timeOfThisPeak = 0; // 当前高峰时间
+
+
 
     @Override
     public void onSensorChanged(SensorEvent event) {
@@ -50,9 +49,10 @@ public class StepTodaySensor implements SensorEventListener {
 
     /**
      * 设置步数初始值，目前只支持设置用加速度传感器进行计步
+     *
      * @param initStep
      */
-    public void setCurrentStep(int initStep){
+    public void setCurrentStep(int initStep) {
         setSteps(initStep);
 
         mCount = initStep;
@@ -61,7 +61,7 @@ public class StepTodaySensor implements SensorEventListener {
         mTodayDate = getTodayDate();
         PreferencesHelper.setStepToday(mContext, mTodayDate);
 
-        if(null != mOnStepTodayListener){
+        if (null != mOnStepTodayListener) {
             mOnStepTodayListener.onChangeStepCounter(mCount);
         }
     }

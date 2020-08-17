@@ -30,6 +30,7 @@ import com.zhongjh.libsteptoday.notification.NotificationApiCompat;
 import com.zhongjh.libsteptoday.sensor.OnStepTodayListener;
 import com.zhongjh.libsteptoday.sensor.StepTodayCounter;
 import com.zhongjh.libsteptoday.sensor.StepTodaySensor;
+import com.zhongjh.libsteptoday.store.db.helper.StepTodayDBHelper;
 import com.zhongjh.libsteptoday.util.StepUtil;
 import com.zhongjh.libsteptoday.util.WakeLockUtils;
 
@@ -41,6 +42,11 @@ import static com.zhongjh.libsteptoday.util.SportStepUtils.getDistanceByStep;
 
 public class StepTodayService extends Service implements Handler.Callback {
 
+    /**
+     * 传感器刷新频率
+     */
+    private static final int SAMPLING_PERIOD_US = SensorManager.SENSOR_DELAY_FASTEST;
+
     public static final String INTENT_NAME_BOOT = "intent_name_boot";
     public static final String INTENT_STEP_INIT = "intent_step_init";
     private static final int NOTIFY_ID = 1000; // 步数通知ID
@@ -50,22 +56,25 @@ public class StepTodayService extends Service implements Handler.Callback {
     private StepTodayCounter mStepTodayCounter; // Sensor.TYPE_STEP_COUNTER 计步传感器计算当天步数，不需要后台Service
     private StepTodaySensor mStepTodaySensor; // 加速度传感器计算当天步数，需要保持后台Service
     private int mDbSaveCount = 0; // 保存数据库计数器
-
+    private boolean mIsSeparate = false; // 是否分隔的
     private boolean mIsBoot = false; // 是否开机启动
 
     private SensorManager mSensorManager; // 传感器管理者
     private NotificationManager notificationManager; // 通知栏管理者
     private NotificationApiCompat mNotificationApiCompat;
 
+    private StepTodayDBHelper mStepTodayDBHelper; // 数据库
+
     @Override
     public void onCreate() {
         super.onCreate();
+        mStepTodayDBHelper = new StepTodayDBHelper();
         mSensorManager = (SensorManager) this.getSystemService(SENSOR_SERVICE);
         initNotification(CURRENT_STEP);
 //        getSensorRate();  反射API29会出现异常
         Map<String, String> map = getLogMap();
         map.put("current_step", String.valueOf(CURRENT_STEP));
-        JLoggerWraper.onEventInfo(this, JLoggerConstant.JLOGGER_SERVICE_INITIALIZE_CURRSTEP, map);
+        JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_INITIALIZE_CURRSTEP, map);
     }
 
     /**
@@ -81,7 +90,7 @@ public class StepTodayService extends Service implements Handler.Callback {
         if (null != intent) {
             mIsBoot = intent.getBooleanExtra(INTENT_NAME_BOOT, false);
             String setStep = intent.getStringExtra(INTENT_STEP_INIT);
-            if (!TextUtils.isEmpty(setStep)) {
+            if (setStep != null && !TextUtils.isEmpty(setStep)) {
                 try {
                     setSteps(Integer.parseInt(setStep));
                 } catch (NumberFormatException e) {
@@ -90,14 +99,14 @@ public class StepTodayService extends Service implements Handler.Callback {
             }
         }
 
-//        mDbSaveCount = 0;
-//
-//        Map<String, String> map = getLogMap();
-//        map.put("current_step", String.valueOf(CURRENT_STEP));
-//        map.put("mSeparate", String.valueOf(mSeparate));
-//        map.put("mBoot", String.valueOf(mBoot));
-//        map.put("mDbSaveCount", String.valueOf(mDbSaveCount));
-//        JLoggerWraper.onEventInfo(this, JLoggerConstant.JLOGGER_SERVICE_ONSTARTCOMMAND, map);
+        mDbSaveCount = 0;
+
+        Map<String, String> map = getLogMap();
+        map.put("current_step", String.valueOf(CURRENT_STEP));
+        map.put("mSeparate", String.valueOf(mIsSeparate));
+        map.put("mBoot", String.valueOf(mIsBoot));
+        map.put("mDbSaveCount", String.valueOf(mDbSaveCount));
+        JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_ONSTARTCOMMAND, map);
 
         // 更新通知
         updateNotification(CURRENT_STEP);
@@ -113,8 +122,6 @@ public class StepTodayService extends Service implements Handler.Callback {
         return null;
     }
 
-
-
     /**
      * @return 获取使用者自定义的通知栏点击包，因为不知道具体是哪个点击包，所以递归查找基类属于BaseClickBroadcast的
      */
@@ -124,8 +131,8 @@ public class StepTodayService extends Service implements Handler.Callback {
             PackageInfo packageInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), PackageManager.GET_RECEIVERS);
             ActivityInfo[] activityInfos = packageInfo.receivers;
             if (null != activityInfos && activityInfos.length > 0) {
-                for (int i = 0; i < activityInfos.length; i++) {
-                    String receiverName = activityInfos[i].name;
+                for (ActivityInfo activityInfo : activityInfos) {
+                    String receiverName = activityInfo.name;
                     Class superClazz = Class.forName(receiverName).getSuperclass();
                     int count = 1;
                     while (null != superClazz) {
@@ -163,13 +170,14 @@ public class StepTodayService extends Service implements Handler.Callback {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && getStepCounter()) {
             addStepCounterListener();
         } else {
-//            addBasePedoListener();
+            addBasePedoListener();
         }
     }
 
     /**
      * 使用Android自帶的传感器
      */
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     private void addStepCounterListener() {
         if (null != mStepTodayCounter) {
             WakeLockUtils.getLock(this); // 锁定CPU
@@ -178,7 +186,7 @@ public class StepTodayService extends Service implements Handler.Callback {
             // 输出日志
             Map<String, String> map = getLogMap();
             map.put("current_step", String.valueOf(CURRENT_STEP));
-            JLoggerWraper.onEventInfo(this, JLoggerConstant.JLOGGER_SERVICE_TYPE_STEP_COUNTER_HADREGISTER, map);
+            JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_TYPE_STEP_COUNTER_HADREGISTER, map);
             return;
         }
         // 判断计步传感器Counter是否可用
@@ -186,7 +194,20 @@ public class StepTodayService extends Service implements Handler.Callback {
         if (null == countSensor) {
             return;
         }
-        mStepTodayCounter = new StepTodayCounter(getApplicationContext(), mOnStepTodayCounterListener, mSeparate, mBoot);
+        mStepTodayCounter = new StepTodayCounter(getApplicationContext(), mOnStepTodayListener, mIsSeparate, mIsBoot);
+        CURRENT_STEP = mStepTodayCounter.getCurrentStep();
+        // 传感器注册
+        boolean registerSuccess = mSensorManager.registerListener(mStepTodayCounter, countSensor, SAMPLING_PERIOD_US);
+
+        // 打印日志
+        Map<String, String> map = getLogMap();
+        map.put("current_step", String.valueOf(CURRENT_STEP));
+        map.put("current_step_registerSuccess", String.valueOf(registerSuccess));
+        JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_TYPE_STEP_COUNTER_REGISTER, map);
+    }
+
+
+    private void addBasePedoListener() {
 
     }
 
@@ -201,7 +222,7 @@ public class StepTodayService extends Service implements Handler.Callback {
             smallIcon = R.drawable.ic_all_out_black_24dp;
         }
         int largeIcon = getResources().getIdentifier("ic_launcher", "mipmap", getPackageName());
-        Bitmap largeIconBitmap = null;
+        Bitmap largeIconBitmap;
         if (0 != largeIcon) {
             largeIconBitmap = BitmapFactory.decodeResource(getResources(), largeIcon);
         } else {
@@ -211,7 +232,7 @@ public class StepTodayService extends Service implements Handler.Callback {
         // 通知的点击事件
         String receiverName = getReceiver(getApplicationContext());
         PendingIntent contentIntent = null;
-        if (!TextUtils.isEmpty(receiverName)) {
+        if (receiverName != null && !TextUtils.isEmpty(receiverName)) {
             try {
                 // 实例化使用者的通知栏点击
                 contentIntent = PendingIntent.getBroadcast(this, BROADCAST_REQUEST_CODE, new Intent(this, Class.forName(receiverName)), PendingIntent.FLAG_UPDATE_CURRENT);
@@ -227,7 +248,7 @@ public class StepTodayService extends Service implements Handler.Callback {
         String calorie = getCalorieByStep(currentStep);
         String contentText = calorie + " 千卡  " + km + " 公里";
 
-        mNotificationApiCompat = new NotificationApiCompat.Builder(this,
+        NotificationApiCompat.Builder notificationApiCompatBuilder = new NotificationApiCompat.Builder(this,
                 notificationManager, // 通知管理器
                 STEP_CHANNEL_ID, // 通知id
                 getString(R.string.step_channel_name), // 通道名称
@@ -237,15 +258,18 @@ public class StepTodayService extends Service implements Handler.Callback {
                 .setContentTitle(getString(R.string.title_notification_bar, String.valueOf(currentStep))) // 通知标题
                 .setTicker(getString(R.string.app_name)) // 设置的是通知时在状态bai栏显示的通知内容，一般du是一段文字，例如在状态zhi栏显示“您有一条短信，dao待查收
                 .setOngoing(true) // 设置为ture，表示它为一个正在进行的通知。他们通常是用来表示 一个后台任务,用户积极参与(如播放音乐)或以某种方式正在等待,因此占用设备(如一个文件下载, 同步操作,主动网络连接)
-                .setPriority(Notification.PRIORITY_MIN) // 通知的优先级，数值越大越高
                 .setLargeIcon(largeIconBitmap) // 设置通知的大图标，当下拉通知后显示的图标
-                .setOnlyAlertOnce(true) // 以便您的通知仅在通知第一次出现时才会中断用户（有声音，振动或视觉线索），而不是以后的更新。
-                .builder();
+                .setOnlyAlertOnce(true); // 以便您的通知仅在通知第一次出现时才会中断用户（有声音，振动或视觉线索），而不是以后的更新。
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            notificationApiCompatBuilder.setPriority(Notification.PRIORITY_MIN); // 通知的优先级，数值越大越高
+        }
+        mNotificationApiCompat = notificationApiCompatBuilder.builder();
         mNotificationApiCompat.startForeground(this, NOTIFY_ID);
     }
 
     /**
      * 更新通知
+     *
      * @param stepCount 当前步数
      */
     private synchronized void updateNotification(int stepCount) {
@@ -260,13 +284,12 @@ public class StepTodayService extends Service implements Handler.Callback {
     private void cleanDb() {
         Map<String, String> map = getLogMap();
         map.put("cleanDB_current_step", String.valueOf(CURRENT_STEP));
-        JLoggerWraper.onEventInfo(this, JLoggerConstant.JLOGGER_SERVICE_CLEAN_DB, map);
+        JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_CLEAN_DB, map);
         mDbSaveCount = 0;
 
-        if (null != mTodayStepDBHelper) {
-            //保存多天的步数
-            mTodayStepDBHelper.deleteTable();
-            mTodayStepDBHelper.createTable();
+        if (null != mStepTodayDBHelper) {
+            // 清空数据
+            mStepTodayDBHelper.deleteAll();
         }
     }
 
@@ -282,7 +305,7 @@ public class StepTodayService extends Service implements Handler.Callback {
     /**
      * 设置步数初始值，目前只支持设置用加速度传感器进行计步
      *
-     * @param steps
+     * @param steps 步数
      */
     private void setSteps(int steps) {
         if (null != mStepTodaySensor) {
@@ -308,6 +331,7 @@ public class StepTodayService extends Service implements Handler.Callback {
     };
 
     private Map<String, String> map;
+
     /**
      * @return 日志map
      */
