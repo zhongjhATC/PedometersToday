@@ -30,11 +30,17 @@ import com.zhongjh.libsteptoday.notification.NotificationApiCompat;
 import com.zhongjh.libsteptoday.sensor.OnStepTodayListener;
 import com.zhongjh.libsteptoday.sensor.StepTodayCounter;
 import com.zhongjh.libsteptoday.sensor.StepTodaySensor;
+import com.zhongjh.libsteptoday.store.db.entity.StepToday;
 import com.zhongjh.libsteptoday.store.db.helper.StepTodayDBHelper;
+import com.zhongjh.libsteptoday.util.DateUtils;
+import com.zhongjh.libsteptoday.util.SportStepUtils;
 import com.zhongjh.libsteptoday.util.StepUtil;
 import com.zhongjh.libsteptoday.util.WakeLockUtils;
 
+import org.json.JSONArray;
+
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.zhongjh.libsteptoday.util.SportStepUtils.getCalorieByStep;
@@ -50,6 +56,11 @@ public class StepTodayService extends Service implements Handler.Callback {
     public static final String INTENT_NAME_BOOT = "intent_name_boot";
     public static final String INTENT_STEP_INIT = "intent_step_init";
     private static final int NOTIFY_ID = 1000; // 步数通知ID
+    private static final int HANDLER_WHAT_SAVE_STEP = 0; // 运动停止保存步数
+    private static final int DB_SAVE_COUNTER = 300; // 保存数据库频率
+    private static final int LAST_SAVE_STEP_DURATION = 10 * 1000; // 如果走路如果停止，10秒钟后保存数据库
+    private static final int HANDLER_WHAT_REFRESH_NOTIFY_STEP = 2; // 刷新通知栏步数
+    private static final int REFRESH_NOTIFY_STEP_DURATION = 3 * 1000; // 刷新通知栏步数，3s一次
     private static final String STEP_CHANNEL_ID = "stepChannelId"; // 通知栏id
     private static final int BROADCAST_REQUEST_CODE = 100; // 点击通知栏广播requestCode
     private static int CURRENT_STEP = 0; // 当前步数
@@ -64,6 +75,7 @@ public class StepTodayService extends Service implements Handler.Callback {
     private NotificationApiCompat mNotificationApiCompat;
 
     private StepTodayDBHelper mStepTodayDBHelper; // 数据库
+    private final Handler mHandler = new Handler(this); // handler
 
     @Override
     public void onCreate() {
@@ -119,7 +131,12 @@ public class StepTodayService extends Service implements Handler.Callback {
     @Nullable
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        Map<String, String> map = getLogMap();
+        map.put("current_step", String.valueOf(CURRENT_STEP));
+        JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_ONBIND, map);
+        mHandler.removeMessages(HANDLER_WHAT_REFRESH_NOTIFY_STEP);
+        mHandler.sendEmptyMessageDelayed(HANDLER_WHAT_REFRESH_NOTIFY_STEP, REFRESH_NOTIFY_STEP_DURATION);
+        return mIBinder.asBinder();
     }
 
     /**
@@ -159,6 +176,23 @@ public class StepTodayService extends Service implements Handler.Callback {
 
     @Override
     public boolean handleMessage(@NonNull Message msg) {
+        switch (msg.what) {
+            case HANDLER_WHAT_SAVE_STEP: {
+                // 走路停止保存数据库
+                mDbSaveCount = 0;
+                saveDb(true, CURRENT_STEP);
+                break;
+            }
+            case HANDLER_WHAT_REFRESH_NOTIFY_STEP: {
+                // 刷新通知栏
+                updateTodayStep(CURRENT_STEP);
+                mHandler.removeMessages(HANDLER_WHAT_REFRESH_NOTIFY_STEP);
+                mHandler.sendEmptyMessageDelayed(HANDLER_WHAT_REFRESH_NOTIFY_STEP, REFRESH_NOTIFY_STEP_DURATION);
+                break;
+            }
+            default:
+                break;
+        }
         return false;
     }
 
@@ -213,7 +247,26 @@ public class StepTodayService extends Service implements Handler.Callback {
         if (null != mStepTodaySensor) {
             WakeLockUtils.getLock(this); // 锁定CPU
             CURRENT_STEP = mStepTodaySensor.getCurrentStep(); // 获取当前步数
+            updateNotification(CURRENT_STEP);
+            Map<String, String> map = getLogMap();
+            map.put("current_step", String.valueOf(CURRENT_STEP));
+            JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_TYPE_ACCELEROMETER_HADREGISTER, map);
+            return;
         }
+        // 没有计步器的时候开启定时器保存数据
+        Sensor sensor = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        if (null == sensor) {
+            return;
+        }
+        mStepTodaySensor = new StepTodaySensor(this, mOnStepTodayListener);
+        CURRENT_STEP = mStepTodaySensor.getCurrentStep();
+        // 获得传感器的类型，这里获得的类型是加速度传感器 此方法用来注册，只有注册过才会生效，参数：SensorEventListener的实例，Sensor的实例，更新速率
+        boolean registerSuccess = mSensorManager.registerListener(mStepTodaySensor, sensor, SAMPLING_PERIOD_US);
+        // 日志
+        Map<String, String> map = getLogMap();
+        map.put("current_step", String.valueOf(CURRENT_STEP));
+        map.put("current_step_registerSuccess", String.valueOf(registerSuccess));
+        JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_TYPE_ACCELEROMETER_REGISTER, map);
     }
 
     /**
@@ -286,6 +339,53 @@ public class StepTodayService extends Service implements Handler.Callback {
         }
     }
 
+    /**
+     * 步数每次回调的方法
+     *
+     * @param currentStep 当前步数
+     */
+    private void updateTodayStep(int currentStep) {
+        CURRENT_STEP = currentStep;
+        updateNotification(CURRENT_STEP);
+        saveStep(currentStep);
+    }
+
+    private void saveStep(int currentStep) {
+        mHandler.removeMessages(HANDLER_WHAT_SAVE_STEP);
+        mHandler.sendEmptyMessageDelayed(HANDLER_WHAT_SAVE_STEP, LAST_SAVE_STEP_DURATION);
+
+        if (DB_SAVE_COUNTER > mDbSaveCount) {
+            mDbSaveCount++;
+
+            return;
+        }
+        mDbSaveCount = 0;
+
+        saveDb(false, currentStep);
+    }
+
+    /**
+     * @param handler     true handler回调保存步数，否false
+     * @param currentStep 当前步数
+     */
+    private void saveDb(boolean handler, int currentStep) {
+        StepToday todayStepData = new StepToday();
+        todayStepData.setToday(getTodayDate());
+        todayStepData.setDate(System.currentTimeMillis());
+        todayStepData.setStep(currentStep);
+        if (null != mStepTodayDBHelper) {
+            if (!handler || !mStepTodayDBHelper.isExist(todayStepData)) {
+                mStepTodayDBHelper.insert(todayStepData);
+                Map<String, String> map = getLogMap();
+                map.put("saveDb_currentStep", String.valueOf(currentStep));
+                JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_SERVICE_INSERT_DB, map);
+            }
+        }
+    }
+
+    /**
+     * 清空数据
+     */
     private void cleanDb() {
         Map<String, String> map = getLogMap();
         map.put("cleanDB_current_step", String.valueOf(CURRENT_STEP));
@@ -318,6 +418,40 @@ public class StepTodayService extends Service implements Handler.Callback {
         }
     }
 
+    /**
+     * service的bind
+     */
+    private final ISportStepInterface.Stub mIBinder = new ISportStepInterface.Stub() {
+
+        private JSONArray getSportStepJsonArray(List<StepToday> todayStepDataArrayList) {
+            return SportStepUtils.getSportStepJsonArray(todayStepDataArrayList);
+        }
+
+        /**
+         * @return 获取当前时间运动步数
+         */
+        @Override
+        public int getCurrentTimeSportStep() {
+            return CURRENT_STEP;
+        }
+
+        /**
+         * @return 获取所有步数列表，json格式，如果数据过多建议在线程中获取，否则会阻塞UI线程
+         */
+        @Override
+        public String getTodaySportStepArray() {
+            if (null != mStepTodayDBHelper) {
+                List<StepToday> todayStepDataArrayList = mStepTodayDBHelper.getQueryAll();
+                JSONArray jsonArray = getSportStepJsonArray(todayStepDataArrayList);
+                return jsonArray.toString();
+            }
+            return null;
+        }
+    };
+
+    /**
+     * 事件
+     */
     private OnStepTodayListener mOnStepTodayListener = new OnStepTodayListener() {
         @Override
         public void onChangeStepCounter(int step) {
@@ -334,6 +468,10 @@ public class StepTodayService extends Service implements Handler.Callback {
         }
 
     };
+
+    private String getTodayDate() {
+        return DateUtils.getCurrentDate("yyyy-MM-dd");
+    }
 
     private Map<String, String> map;
 

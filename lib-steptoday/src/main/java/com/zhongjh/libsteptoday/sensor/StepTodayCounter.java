@@ -22,6 +22,7 @@ import com.zhongjh.libsteptoday.util.DateUtils;
 import com.zhongjh.libsteptoday.util.WakeLockUtils;
 
 import java.util.HashMap;
+import java.util.Map;
 
 import androidx.annotation.RequiresApi;
 
@@ -40,6 +41,7 @@ public class StepTodayCounter implements SensorEventListener {
     private String mTodayDate; // 当天时间日期
     private boolean mIsCleanStep = true; // 是否清除了步数
     private boolean mIsShutdown = false; // 是否曾经关机过
+    private boolean mCounterStepReset = true; //用来标记对象第一次创建
     private OnStepTodayListener mOnStepTodayListener;
     private boolean mIsSeparate = false; // 是否隔天
     private boolean mIsBoot = false; // 是否开机启动
@@ -70,7 +72,7 @@ public class StepTodayCounter implements SensorEventListener {
                         map.put("battery", String.valueOf(battery));
                     }
                     map.put("isScreenOn", String.valueOf(getScreenState()));
-                    Log.e("wcd_map", map.toString());
+                    Log.d("wcd_map", map.toString());
                     JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_TYPE_STEP_COUNTER_TIMER, map);
                     sHandler.removeMessages(HANDLER_WHAT_TEST_JLOGGER);
                     sHandler.sendEmptyMessageDelayed(HANDLER_WHAT_TEST_JLOGGER, WHAT_TEST_JLOGGER_DURATION);
@@ -123,7 +125,66 @@ public class StepTodayCounter implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
+        // 计步器（记录历史步数累加值）
+        if (event.sensor.getType() == Sensor.TYPE_STEP_COUNTER) {
+            // 传感器步数
+            int counterStep = (int) event.values[0];
+            if (mIsCleanStep) {
+                // TODO:只有传感器回调才会记录当前传感器步数，然后对当天步数进行清零，所以步数会少，少的步数等于传感器启动需要的步数，假如传感器需要10步进行启动，那么就少10步
+                Map<String, String> map = new HashMap<>();
+                map.put("clean_before_sCurrStep", String.valueOf(mCurrStep));
+                map.put("clean_before_sOffsetStep", String.valueOf(mOffsetStep));
+                map.put("clean_before_mCleanStep", String.valueOf(mIsCleanStep));
+                cleanStep(counterStep);
+                map.put("clean_after_sCurrStep", String.valueOf(mCurrStep));
+                map.put("clean_after_sOffsetStep", String.valueOf(mOffsetStep));
+                map.put("clean_after_mCleanStep", String.valueOf(mIsCleanStep));
+                JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_TYPE_STEP_CLEANSTEP, map);
+            } else {
+                // 处理关机启动
+                if (mIsShutdown || shutdownByCounterStep(counterStep)) {
+                    Map<String, String> map = new HashMap<>();
+                    map.put("shutdown_before_mShutdown", String.valueOf(mIsShutdown));
+                    map.put("shutdown_before_mCounterStepReset", String.valueOf(mCounterStepReset));
+                    map.put("shutdown_before_sOffsetStep", String.valueOf(mOffsetStep));
+                    shutdown(counterStep);
+                    map.put("shutdown_after_mShutdown", String.valueOf(mIsShutdown));
+                    map.put("shutdown_after_mCounterStepReset", String.valueOf(mCounterStepReset));
+                    map.put("shutdown_after_sOffsetStep", String.valueOf(mOffsetStep));
+                    JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_TYPE_STEP_SHUTDOWN, map);
+                }
+            }
+            mCurrStep = counterStep - mOffsetStep;
 
+            if (mCurrStep < 0) {
+                Map<String, String> map = new HashMap<>();
+                map.put("tolerance_before_counterStep", String.valueOf(counterStep));
+                map.put("tolerance_before_sCurrStep", String.valueOf(mCurrStep));
+                map.put("tolerance_before_sOffsetStep", String.valueOf(mOffsetStep));
+                // 容错处理，无论任何原因步数不能小于0，如果小于0，直接清零
+                cleanStep(counterStep);
+                map.put("tolerance_after_counterStep", String.valueOf(counterStep));
+                map.put("tolerance_after_sCurrStep", String.valueOf(mCurrStep));
+                map.put("tolerance_after_sOffsetStep", String.valueOf(mOffsetStep));
+                JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_TYPE_STEP_TOLERANCE, map);
+            }
+
+            PreferencesHelper.setCurrentStep(mContext, mCurrStep);
+            PreferencesHelper.setElapsedRealtime(mContext, SystemClock.elapsedRealtime());
+            PreferencesHelper.setLastSensorStep(mContext, counterStep);
+
+            mJLoggerSensorStep = event.values[0];
+            mJLoggerCounterStep = counterStep;
+            mJLoggerCurrStep = mCurrStep;
+            mJLoggerOffsetStep = mOffsetStep;
+            updateStepCounter();
+            if (mJLoggerSensorCount == 0) {
+                sHandler.removeMessages(HANDLER_WHAT_TEST_JLOGGER);
+                sHandler.sendEmptyMessageDelayed(HANDLER_WHAT_TEST_JLOGGER, 800);
+            }
+            // 用来判断传感器是否回调
+            mJLoggerSensorCount++;
+        }
     }
 
     @Override
@@ -140,7 +201,7 @@ public class StepTodayCounter implements SensorEventListener {
     }
 
     /**
-     *
+     * 初始化时间改变广播
      */
     private void initBroadcastReceiver() {
         final IntentFilter filter = new IntentFilter();
@@ -157,6 +218,57 @@ public class StepTodayCounter implements SensorEventListener {
             }
         };
         mContext.registerReceiver(mBatInfoReceiver, filter);
+    }
+
+    /**
+     * 清除步数
+     *
+     * @param counterStep 步数
+     */
+    private void cleanStep(int counterStep) {
+        // 清除步数，步数归零，优先级最高
+        mCurrStep = 0;
+        mOffsetStep = counterStep;
+        PreferencesHelper.setStepOffset(mContext, mOffsetStep);
+
+        mIsCleanStep = false;
+        PreferencesHelper.setCleanStep(mContext, mIsCleanStep);
+        mJLoggerCurrStep = mCurrStep;
+        mJLoggerOffsetStep = mOffsetStep;
+    }
+
+    /**
+     * 当天关机后的处理
+     *
+     * @param counterStep 步数
+     */
+    private void shutdown(int counterStep) {
+        int tmpCurrStep = (int) PreferencesHelper.getCurrentStep(mContext);
+        // 重新设置offset
+        mOffsetStep = counterStep - tmpCurrStep;
+        //  TODO 只有在当天进行过关机，才会进入到这，直接置反??
+        PreferencesHelper.setStepOffset(mContext, mOffsetStep);
+        mIsShutdown = false;
+        PreferencesHelper.setShutdown(mContext, mIsShutdown);
+    }
+
+    /**
+     * 判断当前传感器步数是否小于上次的，如果是就重新启动了
+     *
+     * @param counterStep 传感器步数
+     * @return 是否重新启动
+     */
+    private boolean shutdownByCounterStep(int counterStep) {
+        if (mCounterStepReset) {
+            // 只判断一次
+            mCounterStepReset = false;
+            if (counterStep < PreferencesHelper.getLastSensorStep(mContext)) {
+                JLoggerWraper.onEventInfo(JLoggerConstant.JLOGGER_TYPE_STEP_SHUTDOWNBYCOUNTERSTEP, "当前传感器步数小于上次传感器步数");
+                // 当前传感器步数小于上次传感器步数肯定是重新启动了，只是用来增加精度不是绝对的
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -202,7 +314,7 @@ public class StepTodayCounter implements SensorEventListener {
             PreferencesHelper.setCurrentStep(mContext, mCurrStep);
 
             mJLoggerSensorCount = 0;
-            mJLoggerCurrStep = 0;
+            mJLoggerCurrStep = mCurrStep;
 
             if (null != mOnStepTodayListener) {
                 mOnStepTodayListener.onStepCounterClean();

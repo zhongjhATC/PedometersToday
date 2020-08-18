@@ -1,8 +1,10 @@
-package com.zhongjh.libsteptoday;
+package com.zhongjh.libsteptoday.receiver;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+
+import com.zhongjh.libsteptoday.StepTodayService;
 
 import androidx.core.content.ContextCompat;
 
