@@ -41,4 +41,10 @@ dependencies {
     implementation "org.permissionsdispatcher:permissionsdispatcher:4.7.0"
     annotationProcessor "org.permissionsdispatcher:permissionsdispatcher-processor:4.7.0"
 
+    // 日志 https://github.com/pengwei1024/LogUtils
+    debugImplementation 'com.apkfuns.logutils:library:1.7.5'
+    releaseImplementation 'com.apkfuns.logutils:logutils-no-op:1.7.5'
+    // 日志写入到文件
+    implementation 'com.apkfuns.log2file:log2file:1.3.1'
+
 }

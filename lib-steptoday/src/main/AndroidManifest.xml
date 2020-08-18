@@ -27,8 +27,7 @@
             android:enabled="true"
             android:exported="false"
             android:launchMode="singleInstance"
-            android:priority="1000"
-            android:process=":todaystep">
+            android:priority="1000">
             <intent-filter>
 
                 <!-- 系统启动完成后会调用 -->
@@ -51,6 +50,9 @@
     <uses-feature
         android:name="android.hardware.sensor.stepcounter"
         android:required="true" />
+
+    <!-- Android在8.0限制了后台服务这些，启动后台服务需要设置通知栏，使服务变成前台服务。但是在9.0上，就会出现Permission Denial: startForeground requires android.permission.FOREGROUND_SERVICE。-->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="com.android.launcher.permission.READ_SETTINGS" />
