@@ -46,6 +46,9 @@ import java.util.Map;
 import static com.zhongjh.libsteptoday.util.SportStepUtils.getCalorieByStep;
 import static com.zhongjh.libsteptoday.util.SportStepUtils.getDistanceByStep;
 
+/**
+ * 流程图 https://www.jianshu.com/p/cfc2a200e46d
+ */
 public class StepTodayService extends Service implements Handler.Callback {
 
     /**

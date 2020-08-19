@@ -14,7 +14,7 @@ public class MyReceiver extends BaseClickBroadcast {
     public void onReceive(Context context, Intent intent) {
         App tsApplication = (App) context.getApplicationContext();
 //        if (!tsApplication.isForeground()) {
-            Intent mainIntent = new Intent(context, MainActivity.class);
+            Intent mainIntent = new Intent(context, MainServiceActivity.class);
             mainIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(mainIntent);
 //        } else {

@@ -20,7 +20,7 @@ import com.zhongjh.libsteptoday.StepTodayService;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-public class MainActivity extends AppCompatActivity {
+public class MainServiceActivity extends AppCompatActivity {
 
     private static String TAG = "MainActivity";
 
@@ -38,7 +38,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mViewHolder = new ViewHolder(MainActivity.this);
+        mViewHolder = new ViewHolder(MainServiceActivity.this);
         // 初始化计步模块
         StepTodayManager.startStepTodayService(getApplication());
 
@@ -163,7 +163,7 @@ public class MainActivity extends AppCompatActivity {
         public TextView stepTextView;
         public TextView timeTextView;
 
-        public ViewHolder(MainActivity rootView) {
+        public ViewHolder(MainServiceActivity rootView) {
             this.stepArrayButton = (Button) rootView.findViewById(R.id.stepArrayButton);
             this.stepArrayTextView = (TextView) rootView.findViewById(R.id.stepArrayTextView);
             this.stepTextView = (TextView) rootView.findViewById(R.id.stepTextView);
