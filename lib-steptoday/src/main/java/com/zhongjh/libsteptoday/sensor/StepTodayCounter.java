@@ -32,6 +32,7 @@ import static com.zhongjh.libsteptoday.logger.ConstantDef.WHAT_TEST_JLOGGER_DURA
 /**
  * Sensor.TYPE_STEP_COUNTER
  * 计步传感器计算当天步数，不需要后台Service
+ * 获取计步总数传感器
  */
 public class StepTodayCounter implements SensorEventListener {
 
@@ -123,6 +124,9 @@ public class StepTodayCounter implements SensorEventListener {
         sHandler.sendEmptyMessageDelayed(HANDLER_WHAT_TEST_JLOGGER, WHAT_TEST_JLOGGER_DURATION);
     }
 
+    /**
+     * 当注册的传感器发生新事件时会触发该方法
+     */
     @Override
     public void onSensorChanged(SensorEvent event) {
         // 计步器（记录历史步数累加值）
@@ -130,7 +134,8 @@ public class StepTodayCounter implements SensorEventListener {
             // 传感器步数
             int counterStep = (int) event.values[0];
             if (mIsCleanStep) {
-                // TODO:只有传感器回调才会记录当前传感器步数，然后对当天步数进行清零，所以步数会少，少的步数等于传感器启动需要的步数，假如传感器需要10步进行启动，那么就少10步
+                // TODO: 1.只有传感器回调才会记录当前传感器步数，然后对当天步数进行清零，所以步数会少，少的步数等于传感器启动需要的步数，假如传感器需要10步进行启动，那么就少10步
+                // TODO: 2.mIsCleanStep默认是true,所以第一次安装的时候一定会进入这里，并且将今天手机传感器的步数设置为补偿值，这样今天总值-今天补偿值=今天该app总值
                 Map<String, String> map = new HashMap<>();
                 map.put("clean_before_sCurrStep", String.valueOf(mCurrStep));
                 map.put("clean_before_sOffsetStep", String.valueOf(mOffsetStep));
@@ -187,6 +192,9 @@ public class StepTodayCounter implements SensorEventListener {
         }
     }
 
+    /**
+     * 当注册的传感器的精确度发生变化时会触发该方法
+     */
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
@@ -243,6 +251,7 @@ public class StepTodayCounter implements SensorEventListener {
      * @param counterStep 步数
      */
     private void shutdown(int counterStep) {
+        // 当前步数
         int tmpCurrStep = (int) PreferencesHelper.getCurrentStep(mContext);
         // 重新设置offset
         mOffsetStep = counterStep - tmpCurrStep;
