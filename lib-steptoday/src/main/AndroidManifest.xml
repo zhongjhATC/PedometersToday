@@ -26,6 +26,7 @@
             android:name=".StepTodayService"
             android:enabled="true"
             android:exported="false"
+            android:process=":todaystep"
             android:launchMode="singleInstance"
             android:priority="1000">
 

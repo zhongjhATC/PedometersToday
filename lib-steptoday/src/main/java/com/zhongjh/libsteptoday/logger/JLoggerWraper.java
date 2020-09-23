@@ -30,7 +30,12 @@ public class JLoggerWraper {
                 .configLevel(LogLevel.TYPE_VERBOSE); // 配置可展示日志等级
 
         // 支持输入日志到文件
-        String filePath = Environment.getExternalStorageDirectory() + "/LogUtils/logs/";
+        String filePath;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.KITKAT) {
+            filePath = application.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) + "/LogUtils/logs/";
+        } else {
+            filePath = application.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) + "/LogUtils/logs/";
+        }
         LogUtils.getLog2FileConfig()
                 .configLog2FileEnable(true)  // 是否输出日志到文件
                 .configLogFileEngine(new LogFileEngineFactory(application)) // 日志文件引擎实现
