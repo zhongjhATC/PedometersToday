@@ -12,6 +12,8 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Handler;
@@ -127,6 +129,9 @@ public class StepTodayService extends Service implements Handler.Callback {
         updateNotification(CURRENT_STEP);
         // 注册传感器
         startStepDetector();
+
+        mHandler.removeMessages(HANDLER_WHAT_REFRESH_NOTIFY_STEP);
+        mHandler.sendEmptyMessageDelayed(HANDLER_WHAT_REFRESH_NOTIFY_STEP, REFRESH_NOTIFY_STEP_DURATION);
 
         return START_STICKY;
     }

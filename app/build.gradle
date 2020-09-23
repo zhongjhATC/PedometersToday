@@ -20,7 +20,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 
 
 }
@@ -46,5 +49,9 @@ dependencies {
     releaseImplementation 'com.apkfuns.logutils:logutils-no-op:1.7.5'
     // 日志写入到文件
     implementation 'com.apkfuns.log2file:log2file:1.3.1'
+
+    // 注解权限库,注意，这个需要放在app module才可以生成正确 https://github.com/permissions-dispatcher/PermissionsDispatcher
+    implementation "org.permissionsdispatcher:permissionsdispatcher:4.7.0"
+    annotationProcessor "org.permissionsdispatcher:permissionsdispatcher-processor:4.7.0"
 
 }

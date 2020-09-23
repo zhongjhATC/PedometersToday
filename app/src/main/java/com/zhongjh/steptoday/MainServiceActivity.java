@@ -1,9 +1,16 @@
 package com.zhongjh.steptoday;
 
+import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -18,8 +25,18 @@ import com.zhongjh.libsteptoday.ISportStepInterface;
 import com.zhongjh.libsteptoday.StepTodayManager;
 import com.zhongjh.libsteptoday.StepTodayService;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import permissions.dispatcher.NeedsPermission;
+import permissions.dispatcher.OnPermissionDenied;
+import permissions.dispatcher.OnShowRationale;
+import permissions.dispatcher.PermissionRequest;
+import permissions.dispatcher.RuntimePermissions;
 
+@RuntimePermissions
 public class MainServiceActivity extends AppCompatActivity {
 
     private static String TAG = "MainActivity";
@@ -39,6 +56,17 @@ public class MainServiceActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         mViewHolder = new ViewHolder(MainServiceActivity.this);
+
+        // 权限请求
+        if (ContextCompat.checkSelfPermission(MainServiceActivity.this, Manifest.permission.ACTIVITY_RECOGNITION) != PackageManager.PERMISSION_GRANTED) {
+            MainServiceActivityPermissionsDispatcher.permissionWriteExternalStorageWithPermissionCheck(MainServiceActivity.this);
+        } else {
+            init();
+        }
+
+    }
+
+    private void init() {
         // 初始化计步模块
         StepTodayManager.startStepTodayService(getApplication());
 
@@ -66,7 +94,7 @@ public class MainServiceActivity extends AppCompatActivity {
             }
         }, Context.BIND_AUTO_CREATE);
 
-        //计时器
+        // 计时器
         mhandmhandlele.post(timeRunable);
     }
 
@@ -154,6 +182,46 @@ public class MainServiceActivity extends AppCompatActivity {
         int m = (int) (time / 60);//分
         int h = (int) (time / 3600);//秒
         return String.format("%02d:%02d:%02d", h, m, s);
+    }
+
+    /**
+     * NeedsPermission 请求权限不然计步不了
+     */
+    @RequiresApi(api = Build.VERSION_CODES.Q)
+    @NeedsPermission({Manifest.permission.ACTIVITY_RECOGNITION})
+    public void permissionWriteExternalStorage() {
+        // 申请成功，进行相应操作
+        init();
+    }
+
+    /**
+     * 注解在用于向用户解释为什么需要调用该权限的方法上，只有当第一次请求权限被用户拒绝，下次请求权限之前会调用
+     */
+    @RequiresApi(api = Build.VERSION_CODES.Q)
+    @OnShowRationale({Manifest.permission.ACTIVITY_RECOGNITION})
+    public void permissionWriteExternalStorageRationale(PermissionRequest request) {
+        // 再次请求
+        new AlertDialog.Builder(MainServiceActivity.this)
+                .setMessage("说明：你必须给权限才能正常运行")
+                .setPositiveButton("立即允许", (dialog, which) -> request.proceed())
+                .show();
+    }
+
+    /**
+     * OnPermissionDenied 注解在当用户拒绝了权限请求时需要调用的方法上
+     */
+    @RequiresApi(api = Build.VERSION_CODES.Q)
+    @OnPermissionDenied({Manifest.permission.ACTIVITY_RECOGNITION})
+    public void permissionWriteExternalStorageDenied() {
+        // 再次请求
+        MainServiceActivityPermissionsDispatcher.permissionWriteExternalStorageWithPermissionCheck(MainServiceActivity.this);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        // NOTE: delegate the permission handling to generated method
+        MainServiceActivityPermissionsDispatcher.onRequestPermissionsResult(this, requestCode, grantResults);
     }
 
     public static class ViewHolder {
