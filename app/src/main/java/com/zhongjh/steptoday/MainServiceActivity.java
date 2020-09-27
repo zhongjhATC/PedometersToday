@@ -7,8 +7,6 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -22,8 +20,10 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import com.zhongjh.libsteptoday.ISportStepInterface;
+import com.zhongjh.libsteptoday.StepTodayForeground;
 import com.zhongjh.libsteptoday.StepTodayManager;
 import com.zhongjh.libsteptoday.StepTodayService;
+import com.zhongjh.libsteptoday.sensor.OnStepTodayListener;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.RequiresApi;
@@ -67,35 +67,60 @@ public class MainServiceActivity extends AppCompatActivity {
     }
 
     private void init() {
-        // 初始化计步模块
-        StepTodayManager.startStepTodayService(getApplication());
-
-        // 开启计步Service，同时绑定Activity进行aidl通信
-        Intent intent = new Intent(this, StepTodayService.class);
-        startService(intent);
-        bindService(intent, new ServiceConnection() {
-            @Override
-            public void onServiceConnected(ComponentName name, IBinder service) {
-                // Activity和Service通过aidl进行通信
-                iSportStepInterface = ISportStepInterface.Stub.asInterface(service);
-                try {
-                    mStepSum = iSportStepInterface.getCurrentTimeSportStep();
+        // 判断如果是4.4并且支持
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT && getStepCounter()) {
+            new StepTodayForeground(this, new OnStepTodayListener() {
+                @Override
+                public void onChangeStepCounter(int step) {
+                    mStepSum = step;
                     updateStepCount();
-                } catch (RemoteException e) {
-                    e.printStackTrace();
                 }
-                mDelayHandler.sendEmptyMessageDelayed(REFRESH_STEP_WHAT, TIME_INTERVAL_REFRESH);
 
-            }
+                @Override
+                public void onStepCounterClean() {
 
-            @Override
-            public void onServiceDisconnected(ComponentName name) {
+                }
+            });
+        } else {
+            // 初始化计步模块
+            StepTodayManager.startStepTodayService(getApplication());
 
-            }
-        }, Context.BIND_AUTO_CREATE);
+            // 开启计步Service，同时绑定Activity进行aidl通信
+            Intent intent = new Intent(this, StepTodayService.class);
+            startService(intent);
+            bindService(intent, new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder service) {
+                    // Activity和Service通过aidl进行通信
+                    iSportStepInterface = ISportStepInterface.Stub.asInterface(service);
+                    try {
+                        mStepSum = iSportStepInterface.getCurrentTimeSportStep();
+                        updateStepCount();
+                    } catch (RemoteException e) {
+                        e.printStackTrace();
+                    }
+                    mDelayHandler.sendEmptyMessageDelayed(REFRESH_STEP_WHAT, TIME_INTERVAL_REFRESH);
+
+                }
+
+                @Override
+                public void onServiceDisconnected(ComponentName name) {
+
+                }
+            }, Context.BIND_AUTO_CREATE);
+        }
 
         // 计时器
         mhandmhandlele.post(timeRunable);
+    }
+
+    /**
+     * @return 是否有stepcounter支持
+     */
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
+    private boolean getStepCounter() {
+        Sensor countSensor = ((SensorManager) this.getSystemService(SENSOR_SERVICE)).getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+        return null != countSensor;
     }
 
     public void onClick(View view) {

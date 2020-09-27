@@ -53,11 +53,7 @@ import static com.zhongjh.libsteptoday.util.SportStepUtils.getDistanceByStep;
  */
 public class StepTodayService extends Service implements Handler.Callback {
 
-    /**
-     * 传感器刷新频率
-     */
-    private static final int SAMPLING_PERIOD_US = SensorManager.SENSOR_DELAY_FASTEST;
-
+    private static final int SAMPLING_PERIOD_US = SensorManager.SENSOR_DELAY_FASTEST; // 传感器刷新频率
     public static final String INTENT_NAME_BOOT = "intent_name_boot";
     public static final String INTENT_STEP_INIT = "intent_step_init";
     private static final int NOTIFY_ID = 1000; // 步数通知ID
